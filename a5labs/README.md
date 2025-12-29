@@ -136,3 +136,9 @@ sequenceDiagram
 3. **Pybind11 Bridge**: Provides seamless type conversion between C++ and Python
 4. **C++ Core Engine**: Implements game logic (Kuhn Poker) and state management
 5. **Data Conversion**: Automatic conversion of `std::vector<float>` ↔ Python `list[float]` via Pybind11
+
+## Profiling
+top ten functions consuming most compute time.
+
+## Optimization
+.
