@@ -1,0 +1,23 @@
+# DQN Training Configuration for Kuhn Poker
+
+# Network architecture
+network:
+  hidden_layers_sizes: [64, 64]
+
+# Training hyperparameters
+training:
+  replay_buffer_capacity: 5000
+  batch_size: 64
+  learning_rate: 0.01
+  epsilon_decay_duration: 5000
+  num_episodes: 50000
+  progress_print_interval: 500  # Print progress every N episodes
+
+# Evaluation settings
+evaluation:
+  num_episodes: 1000
+
+# Model saving
+model:
+  save_path: "kuhn_poker_dqn_model.pt"
+

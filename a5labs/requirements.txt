@@ -1,2 +1,3 @@
 ruff
+pyyaml
 torch == 2.9.1
