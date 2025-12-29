@@ -6,10 +6,16 @@ network:
 
 # Training hyperparameters
 training:
-  replay_buffer_capacity: 5000
-  batch_size: 64
-  learning_rate: 0.01
-  epsilon_decay_duration: 5000
+  replay_buffer_capacity: 50000  # DQN paper: 1M for Atari
+  batch_size: 64  # DQN paper: 32
+  learning_rate: 0.001  # DQN paper: 0.00025
+  epsilon_start: 1.0  # Initial exploration rate
+  epsilon_end: 0.1  # Final exploration rate
+  epsilon_decay_duration: 20000  # DQN paper: 1M steps
+  discount_factor: 0.99  # DQN paper: 0.99, default: 1.0
+  min_buffer_size_to_learn: 5000  # default: 1000, too small
+  update_target_network_every: 2000  # Target network update frequency (DQN paper: 10K, default: 1K)
+  learn_every: 10  # Learning frequency in steps (default: 10)
   num_episodes: 50000
   progress_print_interval: 500  # Print progress every N episodes
 

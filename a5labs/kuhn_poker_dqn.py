@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Kuhn Poker DQN Agent - Simple Example.
-
-This script demonstrates a minimal example of training a DQN agent in the
-Kuhn Poker environment using OpenSpiel.
-"""
+"""Kuhn Poker DQN Agent - Simple Example."""
 
 import argparse
 import logging
+import statistics
 from pathlib import Path
 from typing import Any, Dict
 
 import torch
 import yaml
+import os
 
 from open_spiel.python import rl_environment
 from open_spiel.python.algorithms import random_agent
@@ -33,6 +31,62 @@ def load_config(config_path: Path) -> Dict[str, Any]:
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
+
+
+def init_agent(
+    player_id: int,
+    info_state_size: int,
+    num_actions: int,
+    network_config: Dict[str, Any],
+    training_config: Dict[str, Any],
+) -> dqn.DQN:
+    """Initialize DQN agent with configuration.
+
+    Args:
+        player_id: Player ID for the agent
+        info_state_size: Size of information state representation
+        num_actions: Number of possible actions
+        network_config: Network architecture configuration
+        training_config: Training hyperparameters configuration
+
+    Returns:
+        Initialized DQN agent
+    """
+    return dqn.DQN(
+        player_id=player_id,
+        state_representation_size=info_state_size,
+        num_actions=num_actions,
+        hidden_layers_sizes=network_config["hidden_layers_sizes"],
+        replay_buffer_capacity=training_config["replay_buffer_capacity"],
+        batch_size=training_config["batch_size"],
+        learning_rate=training_config["learning_rate"],
+        epsilon_start=training_config.get("epsilon_start", 1.0),
+        epsilon_end=training_config.get("epsilon_end", 0.1),
+        epsilon_decay_duration=training_config["epsilon_decay_duration"],
+        discount_factor=training_config.get("discount_factor", 0.99),
+        min_buffer_size_to_learn=training_config.get("min_buffer_size_to_learn", 1000),
+        update_target_network_every=training_config.get(
+            "update_target_network_every", 1000
+        ),
+        learn_every=training_config.get("learn_every", 10),
+    )
+
+
+def load_model(agent: dqn.DQN, save_path: str) -> None:
+    """Load DQN model from file if it exists.
+
+    Args:
+        agent: DQN agent instance to load weights into
+        save_path: Path to the model checkpoint file
+    """
+    if os.path.exists(save_path):
+        logging.info(f"Loading model from '{save_path}'...")
+        # Add MLP class to safe globals for PyTorch 2.6+ compatibility
+        torch.serialization.add_safe_globals([dqn.MLP])
+        agent.load(save_path)
+        logging.info("Model loaded successfully")
+    else:
+        logging.info("No model file found, using untrained model")
 
 
 def run_episode(
@@ -77,9 +131,12 @@ def run_episode(
     return time_step.rewards[0]
 
 
-def main() -> None:
-    """Simple Kuhn Poker DQN training example"""
-    # Parse command line arguments
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments.
+
+    Returns:
+        Parsed command line arguments
+    """
     parser = argparse.ArgumentParser(description="Train DQN agent for Kuhn Poker")
     parser.add_argument(
         "--config",
@@ -92,7 +149,13 @@ def main() -> None:
         action="store_true",
         help="Run evaluation only (skip training)",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Simple Kuhn Poker DQN training example"""
+    # Parse command line arguments
+    args = parse_args()
 
     # Load configuration
     config_path = Path(args.config)
@@ -121,28 +184,14 @@ def main() -> None:
 
     # 3. Create DQN agent
     logging.info("Creating DQN agent...")
-    agent = dqn.DQN(
-        player_id=0,
-        state_representation_size=info_state_size,
-        num_actions=num_actions,
-        hidden_layers_sizes=network_config["hidden_layers_sizes"],
-        replay_buffer_capacity=training_config["replay_buffer_capacity"],
-        batch_size=training_config["batch_size"],
-        learning_rate=training_config["learning_rate"],
-        epsilon_decay_duration=training_config["epsilon_decay_duration"],
-    )
+    agent = init_agent(0, info_state_size, num_actions, network_config, training_config)
 
     # 4. Create random agent (opponent)
     opponent = random_agent.RandomAgent(player_id=1, num_actions=num_actions)
 
     # Load model if in evaluation mode
-    save_path = model_config["save_path"]
-    if args.eval and Path(save_path).exists():
-        logging.info(f"Loading model from '{save_path}'...")
-        # Add MLP class to safe globals for PyTorch 2.6+ compatibility
-        torch.serialization.add_safe_globals([dqn.MLP])
-        agent.load(save_path)
-        logging.info("Model loaded successfully")
+    if args.eval:
+        load_model(agent, model_config["save_path"])
 
     # Determine number of episodes and mode
     is_evaluation = args.eval
@@ -157,19 +206,57 @@ def main() -> None:
     logging.info("Evaluating..." if is_evaluation else "Training...")
 
     total_rewards = 0.0
+    wins = losses = draws = 0
+    episode_rewards = []  # For evaluation statistics
+
     for episode in range(num_episodes):
         reward = run_episode(env, agent, opponent, is_evaluation=is_evaluation)
         total_rewards += reward
+        episode_rewards.append(reward)
+
+        # Track win/loss/draw
+        wins += reward > 0
+        losses += reward < 0
+        draws += reward == 0
 
         # Print progress periodically (only during training)
         if not is_evaluation and (episode + 1) % progress_interval == 0:
             loss = agent.loss
-            logging.info(f"Episode {episode + 1}/{num_episodes} - Loss: {loss}")
+            win_rate = wins / (episode + 1) * 100
+            avg_reward_window = sum(episode_rewards[-progress_interval:]) / min(
+                progress_interval, episode + 1
+            )
+            replay_buffer_size = len(agent.replay_buffer)
+            loss_str = f"{loss:.6f}" if loss is not None else "N/A (buffer too small)"
+            logging.info(
+                f"Episode {episode + 1}/{num_episodes} - "
+                f"Loss: {loss_str}, "
+                f"Replay Buffer: {replay_buffer_size}/{training_config['replay_buffer_capacity']}, "
+                f"Win Rate: {win_rate:.2f}% ({wins}W/{losses}L/{draws}D), "
+                f"Avg Reward (last {progress_interval}): {avg_reward_window:.4f}"
+            )
 
     if is_evaluation:
-        # Evaluation results
+        # Detailed evaluation results
         avg_reward = total_rewards / num_episodes
-        logging.info(f"Average reward (vs random): {avg_reward:.4f}")
+        win_rate = wins / num_episodes * 100
+        std_dev = statistics.stdev(episode_rewards) if len(episode_rewards) > 1 else 0.0
+        max_reward = max(episode_rewards)
+        min_reward = min(episode_rewards)
+
+        logging.info("=" * 80)
+        logging.info("Evaluation Results")
+        logging.info("=" * 80)
+        logging.info(f"Total Episodes: {num_episodes}")
+        logging.info(f"Wins: {wins} ({wins/num_episodes*100:.2f}%)")
+        logging.info(f"Losses: {losses} ({losses/num_episodes*100:.2f}%)")
+        logging.info(f"Draws: {draws} ({draws/num_episodes*100:.2f}%)")
+        logging.info(f"Win Rate: {win_rate:.2f}%")
+        logging.info(f"Average Reward: {avg_reward:.4f}")
+        logging.info(f"Reward Std Dev: {std_dev:.4f}")
+        logging.info(f"Max Reward: {max_reward:.4f}")
+        logging.info(f"Min Reward: {min_reward:.4f}")
+        logging.info("=" * 80)
     else:
         # Training completed - save model
         logging.info("Training completed!")
