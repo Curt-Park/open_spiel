@@ -147,6 +147,9 @@ $ kernprof -l -v a5labs/kuhn_poker_dqn.py
 $ sudo py-spy record -o a5labs/profile.svg -- python a5labs/kuhn_poker_dqn.py 
 ```
 
+### `py-spy` result
+![FlameGraph profiling result](pyspy.png)
+
 ### Line Profiling Result
 ```bash
 Timer unit: 1e-06 s
@@ -318,10 +321,97 @@ Line #      Hits         Time  Per Hit   % Time  Line Contents
    277         1          0.0      0.0      0.0          save_path = model_config["save_path"]
    278         1       3784.0   3784.0      0.0          agent.save(save_path)
    279         1         83.0     83.0      0.0          logging.info(f"Model saved to '{save_path}'")
-```
 
-### `py-spy` result
-![FlameGraph profiling result](pyspy.png)
+
+Total time: 6.05994 s
+File: /Users/user/Repositories/open_spiel/.venv/lib/python3.12/site-packages/open_spiel/python/pytorch/dqn.py
+Function: DQN.step at line 204
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   204                                             @profile
+   205                                             def step(self, time_step, is_evaluation=False, add_transition_record=True):
+   206                                               """Returns the action to be taken and updates the Q-network if needed.
+   207                                           
+   208                                               Args:
+   209                                                 time_step: an instance of rl_environment.TimeStep.
+   210                                                 is_evaluation: bool, whether this is a training or evaluation call.
+   211                                                 add_transition_record: Whether to add to the replay buffer on this step.
+   212                                           
+   213                                               Returns:
+   214                                                 A `rl_agent.StepOutput` containing the action probs and chosen action.
+   215                                               """
+   216                                           
+   217                                               # Act step: don't act at terminal info states or if its not our turn.
+   218     52695      35037.0      0.7      0.6      if (not time_step.last()) and (
+   219     27695      19374.0      0.7      0.3          time_step.is_simultaneous_move() or
+   220     27695      19600.0      0.7      0.3          self.player_id == time_step.current_player()):
+   221     27695       7310.0      0.3      0.1        info_state = time_step.observations["info_state"][self.player_id]
+   222     27695       6311.0      0.2      0.1        legal_actions = time_step.observations["legal_actions"][self.player_id]
+   223     27695      69448.0      2.5      1.1        epsilon = self._get_epsilon(is_evaluation)
+   224     27695    1573136.0     56.8     26.0        action, probs = self._epsilon_greedy(info_state, legal_actions, epsilon)
+   225                                               else:
+   226     25000       5809.0      0.2      0.1        action = None
+   227     25000       5796.0      0.2      0.1        probs = []
+   228                                           
+   229                                               # Don't mess up with the state during evaluation.
+   230     52695      13644.0      0.3      0.2      if not is_evaluation:
+   231     52695      16576.0      0.3      0.3        self._step_counter += 1
+   232                                           
+   233     52695      14906.0      0.3      0.2        if self._step_counter % self._learn_every == 0:
+   234      5269    3896837.0    739.6     64.3          self._last_loss_value = self.learn()
+   235                                           
+   236     52695      15883.0      0.3      0.3        if self._step_counter % self._update_target_network_every == 0:
+   237                                                   # state_dict method returns a dictionary containing a whole state of the
+   238                                                   # module.
+   239        26       6767.0    260.3      0.1          self._target_q_network.load_state_dict(self._q_network.state_dict())
+   240                                           
+   241     52695      13543.0      0.3      0.2        if self._prev_timestep and add_transition_record:
+   242                                                   # We may omit record adding here if it's done elsewhere.
+   243     27695     210476.0      7.6      3.5          self.add_transition(self._prev_timestep, self._prev_action, time_step)
+   244                                           
+   245     52695      38929.0      0.7      0.6        if time_step.last():  # prepare for the next episode.
+   246     25000      13169.0      0.5      0.2          self._prev_timestep = None
+   247     25000       6056.0      0.2      0.1          self._prev_action = None
+   248     25000      14341.0      0.6      0.2          return
+   249                                                 else:
+   250     27695       7694.0      0.3      0.1          self._prev_timestep = time_step
+   251     27695       6703.0      0.2      0.1          self._prev_action = action
+   252                                           
+   253     27695      42597.0      1.5      0.7      return rl_agent.StepOutput(action=action, probs=probs)
+
+Total time: 1.44852 s
+File: /Users/user/Repositories/open_spiel/.venv/lib/python3.12/site-packages/open_spiel/python/pytorch/dqn.py
+Function: DQN._epsilon_greedy at line 280
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   280                                             @profile
+   281                                             def _epsilon_greedy(self, info_state, legal_actions, epsilon):
+   282                                               """Returns a valid epsilon-greedy action and valid action probs.
+   283                                           
+   284                                               Action probabilities are given by a softmax over legal q-values.
+   285                                           
+   286                                               Args:
+   287                                                 info_state: hashable representation of the information state.
+   288                                                 legal_actions: list of legal actions at `info_state`.
+   289                                                 epsilon: float, probability of taking an exploratory action.
+   290                                           
+   291                                               Returns:
+   292                                                 A valid epsilon-greedy action and valid action probabilities.
+   293                                               """
+   294     27695      14520.0      0.5      1.0      probs = np.zeros(self._num_actions)
+   295     27695      21295.0      0.8      1.5      if np.random.rand() < epsilon:
+   296      7710      74041.0      9.6      5.1        action = np.random.choice(legal_actions)
+   297      7710       8908.0      1.2      0.6        probs[legal_actions] = 1.0 / len(legal_actions)
+   298                                               else:
+   299     19985     231897.0     11.6     16.0        info_state = torch.Tensor(np.reshape(info_state, [1, -1]))
+   300     19985     920785.0     46.1     63.6        q_values = self._q_network(info_state).detach()[0]
+   301     19985      98565.0      4.9      6.8        legal_q_values = q_values[legal_actions]
+   302     19985      53900.0      2.7      3.7        action = legal_actions[torch.argmax(legal_q_values)]
+   303     19985       9253.0      0.5      0.6        probs[action] = 1.0
+   304     27695      15359.0      0.6      1.1      return action, probs
+```
 
 ## Optimization
 .
