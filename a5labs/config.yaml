@@ -16,7 +16,7 @@ training:
   min_buffer_size_to_learn: 5000  # default: 1000, too small
   update_target_network_every: 2000  # Target network update frequency (DQN paper: 10K, default: 1K)
   learn_every: 10  # Learning frequency in steps (default: 10)
-  num_episodes: 50000
+  num_episodes: 25000
   progress_print_interval: 500  # Print progress every N episodes
 
 # Evaluation settings

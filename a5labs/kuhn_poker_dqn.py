@@ -2,10 +2,11 @@
 """Kuhn Poker DQN Agent - Simple Example."""
 
 import argparse
+import builtins
 import logging
 import statistics
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 import torch
 import yaml
@@ -17,6 +18,16 @@ from open_spiel.python.pytorch import dqn
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+
+# noop profile decorator for line profile
+if "profile" not in builtins.__dict__:
+    def profile(func: Callable[Any, Any]) -> Any:
+        """No-OP profile decorator."""
+        def inner(*args: Any, **kwargs: Any) -> Callable[Any, Any]:
+            """Identity function."""
+            return func(*args, **kwargs)
+        return inner
 
 
 def load_config(config_path: Path) -> Dict[str, Any]:
@@ -89,6 +100,7 @@ def load_model(agent: dqn.DQN, save_path: str) -> None:
         logging.info("No model file found, using untrained model")
 
 
+@profile
 def run_episode(
     env: rl_environment.Environment,
     agent: dqn.DQN,
@@ -152,6 +164,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+@profile
 def main() -> None:
     """Simple Kuhn Poker DQN training example"""
     # Parse command line arguments

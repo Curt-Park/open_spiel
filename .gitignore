@@ -66,3 +66,4 @@ open_spiel/.vs
 open_spiel/json/
 open_spiel/pybind11_json/
 *.pt
+*.lprof
